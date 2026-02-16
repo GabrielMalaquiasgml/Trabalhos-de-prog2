@@ -1,0 +1,414 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+enum Color { VERMELHO, PRETO };
+
+typedef struct Node {
+    int data;
+    enum Color color;
+    struct Node *esquerda, *direita, *pai;
+} Node;
+
+typedef struct RBTree {
+    Node *root;
+    Node *TNULL;
+} RBTree;
+
+void initializeTree(RBTree *tree);
+void leftRotate(RBTree *tree, Node *x);
+void direitaRotate(RBTree *tree, Node *x);
+void insertFix(RBTree *tree, Node *k);
+void insert(RBTree *tree, int key);
+void deleteFix(RBTree *tree, Node *x);
+void rbTransplant(RBTree *tree, Node *u, Node *v);
+void deleteNode(RBTree *tree, int key);
+Node* search(RBTree *tree, int key);
+void printPreOrder(RBTree *tree, Node *node);
+void printInOrder(RBTree *tree, Node *node);
+void printPostOrder(RBTree *tree, Node *node);
+Node* minimum(RBTree *tree, Node *node);
+
+void initializeTree(RBTree *tree) {
+    tree->TNULL = (Node*)malloc(sizeof(Node));
+    tree->TNULL->color = PRETO;
+    tree->TNULL->esquerda = NULL;
+    tree->TNULL->direita = NULL;
+    tree->root = tree->TNULL;
+}
+
+void leftRotate(RBTree *tree, Node *x) {
+    Node *y = x->direita;
+    x->direita = y->esquerda;
+    if (y->esquerda != tree->TNULL) {
+        y->esquerda->pai = x;
+    }
+    y->pai = x->pai;
+    if (x->pai == NULL) {
+        tree->root = y;
+    } else if (x == x->pai->esquerda) {
+        x->pai->esquerda = y;
+    } else {
+        x->pai->direita = y;
+    }
+    y->esquerda = x;
+    x->pai = y;
+}
+
+void direitaRotate(RBTree *tree, Node *x) {
+    Node *y = x->esquerda;
+    x->esquerda = y->direita;
+    if (y->direita != tree->TNULL) {
+        y->direita->pai = x;
+    }
+    y->pai = x->pai;
+    if (x->pai == NULL) {
+        tree->root = y;
+    } else if (x == x->pai->direita) {
+        x->pai->direita = y;
+    } else {
+        x->pai->esquerda = y;
+    }
+    y->direita = x;
+    x->pai = y;
+}
+
+void insertFix(RBTree *tree, Node *k) {
+    Node *u; // Tio
+    
+    // CORREÇÃO: Adicionado "k->pai != NULL" antes de checar a cor
+    while (k->pai != NULL && k->pai->color == VERMELHO) {
+        if (k->pai == k->pai->pai->direita) {
+            u = k->pai->pai->esquerda; // Tio a esquerda
+            if (u->color == VERMELHO) {
+                // Caso 1: Tio e vermelho
+                u->color = PRETO;
+                k->pai->color = PRETO;
+                k->pai->pai->color = VERMELHO;
+                k = k->pai->pai; // K sobe para o avô
+            } else {
+                if (k == k->pai->esquerda) {
+                    // Caso 2: Tio preto, K e filho esquerdo
+                    k = k->pai;
+                    direitaRotate(tree, k);
+                }
+                // Caso 3: Tio preto, K e filho direito
+                k->pai->color = PRETO; // setar cor antes de rotacionar
+                k->pai->pai->color = VERMELHO;
+                leftRotate(tree, k->pai->pai);
+            }
+        } else {
+            u = k->pai->pai->direita; // Tio e direita
+            if (u->color == VERMELHO) {
+                u->color = PRETO;
+                k->pai->color = PRETO;
+                k->pai->pai->color = VERMELHO;
+                k = k->pai->pai; // K sobe para o avô
+            } else {
+                if (k == k->pai->direita) {
+                    k = k->pai;
+                    leftRotate(tree, k);
+                }
+                k->pai->color = PRETO;
+                k->pai->pai->color = VERMELHO;
+                direitaRotate(tree, k->pai->pai);
+            }
+        }
+        if (k == tree->root) {
+            break;
+        }
+    }
+    tree->root->color = PRETO;
+}
+
+void insert(RBTree *tree, int key) {
+    Node *node = (Node*)malloc(sizeof(Node));
+    node->pai = NULL;
+    node->data = key;
+    node->esquerda = tree->TNULL;
+    node->direita = tree->TNULL;
+    node->color = VERMELHO; // Novos nós vão ser vermelhos
+
+    Node *y = NULL;
+    Node *x = tree->root;
+
+    while (x != tree->TNULL) {
+        y = x;
+        if (node->data < x->data) {
+            x = x->esquerda;
+        } else {
+            x = x->direita;
+        }
+    }
+
+    node->pai = y;
+    if (y == NULL) {
+        tree->root = node;
+    } else if (node->data < y->data) {
+        y->esquerda = node;
+    } else {
+        y->direita = node;
+    }
+
+    if (node->pai == NULL) {
+        node->color = PRETO;
+        return;
+    }
+
+    if (node->pai->pai == NULL) {
+        return;
+    }
+
+    insertFix(tree, node);
+}
+
+void rbTransplant(RBTree *tree, Node *u, Node *v) {
+    if (u->pai == NULL) {
+        tree->root = v;
+    } else if (u == u->pai->esquerda) {
+        u->pai->esquerda = v;
+    } else {
+        u->pai->direita = v;
+    }
+    v->pai = u->pai;
+}
+
+Node* minimum(RBTree *tree, Node *node) {
+    while (node->esquerda != tree->TNULL) {
+        node = node->esquerda;
+    }
+    return node;
+}
+
+void deleteFix(RBTree *tree, Node *x) {
+    Node *s;
+    while (x != tree->root && x->color == PRETO) {
+        if (x == x->pai->esquerda) {
+            s = x->pai->direita;
+            if (s->color == VERMELHO) {
+                // Caso 1: Irmão vermelho
+                s->color = PRETO;
+                x->pai->color = VERMELHO;
+                leftRotate(tree, x->pai);
+                s = x->pai->direita;
+            }
+
+            if (s->esquerda->color == PRETO && s->direita->color == PRETO) {
+                // Caso 2: Ambos sobrinhos pretos
+                s->color = VERMELHO;
+                x = x->pai;
+            } else {
+                if (s->direita->color == PRETO) {
+                    // Caso 3: Sobrinho próximo vermelho, distante preto
+                    s->esquerda->color = PRETO;
+                    s->color = VERMELHO;
+                    direitaRotate(tree, s);
+                    s = x->pai->direita;
+                }
+                // Caso 4: Sobrinho distante vermelho
+                s->color = x->pai->color;
+                x->pai->color = PRETO;
+                s->direita->color = PRETO;
+                leftRotate(tree, x->pai);
+                x = tree->root;
+            }
+        } else {
+            s = x->pai->esquerda;
+            if (s->color == VERMELHO) {
+                s->color = PRETO;
+                x->pai->color = VERMELHO;
+                direitaRotate(tree, x->pai);
+                s = x->pai->esquerda;
+            }
+
+            if (s->direita->color == PRETO && s->esquerda->color == PRETO) {
+                s->color = VERMELHO;
+                x = x->pai;
+            } else {
+                if (s->esquerda->color == PRETO) {
+                    s->direita->color = PRETO;
+                    s->color = VERMELHO;
+                    leftRotate(tree, s);
+                    s = x->pai->esquerda;
+                }
+
+                s->color = x->pai->color;
+                x->pai->color = PRETO;
+                s->esquerda->color = PRETO;
+                direitaRotate(tree, x->pai);
+                x = tree->root;
+            }
+        }
+    }
+    x->color = PRETO;
+}
+
+void deleteNode(RBTree *tree, int key) {
+    Node *z = tree->TNULL;
+    Node *x, *y;
+    Node *node = tree->root;
+
+    while (node != tree->TNULL) {
+        if (node->data == key) {
+            z = node;
+        }
+        if (node->data <= key) {
+            node = node->direita;
+        } else {
+            node = node->esquerda;
+        }
+    }
+
+    if (z == tree->TNULL) {
+        printf("Chave %d não encontrada na árvore.\n", key);
+        return;
+    }
+
+    y = z;
+    enum Color y_original_color = y->color;
+    if (z->esquerda == tree->TNULL) {
+        x = z->direita;
+        rbTransplant(tree, z, z->direita);
+    } else if (z->direita == tree->TNULL) {
+        x = z->esquerda;
+        rbTransplant(tree, z, z->esquerda);
+    } else {
+        y = minimum(tree, z->direita);
+        y_original_color = y->color;
+        x = y->direita;
+        if (y->pai == z) {
+            x->pai = y;
+        } else {
+            rbTransplant(tree, y, y->direita);
+            y->direita = z->direita;
+            y->direita->pai = y;
+        }
+        rbTransplant(tree, z, y);
+        y->esquerda = z->esquerda;
+        y->esquerda->pai = y;
+        y->color = z->color;
+    }
+    free(z);
+    if (y_original_color == PRETO) {
+        deleteFix(tree, x);
+    }
+    printf("Chave %d removida.\n", key);
+}
+
+Node* search(RBTree *tree, int key) {
+    Node *current = tree->root;
+    while (current != tree->TNULL) {
+        if (key == current->data) {
+            return current;
+        } else if (key < current->data) {
+            current = current->esquerda;
+        } else {
+            current = current->direita;
+        }
+    }
+    return NULL;
+}
+
+void printHelper(Node *root, Node *TNULL, int space) {
+    if (root != TNULL) {
+        space += 10;
+        printHelper(root->direita, TNULL, space);
+        printf("\n");
+        for (int i = 10; i < space; i++) printf(" ");
+        // Imprime (R) para VERMELHO e (B) para Black
+        printf("%d(%c)\n", root->data, root->color == VERMELHO ? 'R' : 'B');
+        printHelper(root->esquerda, TNULL, space);
+    }
+}
+
+void printPreOrder(RBTree *tree, Node *node) {
+    if (node != tree->TNULL) {
+        printf("%d(%c) ", node->data, node->color == VERMELHO ? 'R' : 'B');
+        printPreOrder(tree, node->esquerda);
+        printPreOrder(tree, node->direita);
+    }
+}
+
+void printInOrder(RBTree *tree, Node *node) {
+    if (node != tree->TNULL) {
+        printInOrder(tree, node->esquerda);
+        printf("%d(%c) ", node->data, node->color == VERMELHO ? 'R' : 'B');
+        printInOrder(tree, node->direita);
+    }
+}
+
+void printPostOrder(RBTree *tree, Node *node) {
+    if (node != tree->TNULL) {
+        printPostOrder(tree, node->esquerda);
+        printPostOrder(tree, node->direita);
+        printf("%d(%c) ", node->data, node->color == VERMELHO ? 'R' : 'B');
+    }
+}
+
+int main() {
+    RBTree tree;
+    initializeTree(&tree);
+    int opcao, valor;
+    Node *result;
+
+    do {
+        printf("\n--- ARVORE RUBRO-NEGRA ---\n");
+        printf("1. Inserir\n");
+        printf("2. Buscar\n");
+        printf("3. Remover\n");
+        printf("4. Exibir Pre-Ordem\n");
+        printf("5. Exibir Em-Ordem\n");
+        printf("6. Exibir Pos-Ordem\n");
+        printf("7. Exibir Arvore (Visual)\n");
+        printf("0. Sair\n");
+        printf("Escolha uma opcao: ");
+        scanf("%d", &opcao);
+
+        switch (opcao) {
+            case 1:
+                printf("Digite o valor para inserir: ");
+                scanf("%d", &valor);
+                insert(&tree, valor);
+                break;
+            case 2:
+                printf("Digite o valor para buscar: ");
+                scanf("%d", &valor);
+                result = search(&tree, valor);
+                if (result != NULL)
+                    printf("Valor %d encontrado! Cor: %s\n", valor, result->color == VERMELHO ? "Vermelho" : "Preto");
+                else
+                    printf("Valor %d nao encontrado.\n", valor);
+                break;
+            case 3:
+                printf("Digite o valor para remover: ");
+                scanf("%d", &valor);
+                deleteNode(&tree, valor);
+                break;
+            case 4:
+                printf("Pre-Ordem: ");
+                printPreOrder(&tree, tree.root);
+                printf("\n");
+                break;
+            case 5:
+                printf("Em-Ordem: ");
+                printInOrder(&tree, tree.root);
+                printf("\n");
+                break;
+            case 6:
+                printf("Pos-Ordem: ");
+                printPostOrder(&tree, tree.root);
+                printf("\n");
+                break;
+            case 7:
+                printf("Estrutura da Arvore (Deitado):\n");
+                printHelper(tree.root, tree.TNULL, 0);
+                break;
+            case 0:
+                printf("Saindo...\n");
+                break;
+            default:
+                printf("Opcao invalida!\n");
+        }
+    } while (opcao != 0);
+
+    return 0;
+}
